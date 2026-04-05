@@ -2,7 +2,7 @@
 
 Interactive analytics dashboard built with Streamlit using real Brazilian e-commerce data from [Olist](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce).
 
-🔗 **[Live Demo](https://harshita-0705-olist-e-commerce-analytics.streamlit.app)**
+🔗 **[Live Demo](https://olist-e-commerce-analytics.streamlit.app/)**
 
 ---
 
