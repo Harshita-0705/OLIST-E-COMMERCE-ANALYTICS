@@ -72,23 +72,31 @@ def kpi_summary(master):
 
 
 # ─── FUNNEL ───────────────────────────────────────────────────────────────────
-FUNNEL_ORDER = ['created','approved','invoiced','processing','shipped','delivered']
-
 def build_funnel(master):
-    counts = master['order_status'].value_counts()
-    # Only keep funnel stages that exist in data
-    stages = [s for s in FUNNEL_ORDER if s in counts.index]
-    users  = [counts[s] for s in stages]
+    """
+    Real funnel: each stage = orders that reached AT LEAST that milestone.
+    - Approved  = has order_approved_at timestamp
+    - Invoiced  = status in invoiced/processing/shipped/delivered
+    - Shipped   = has order_delivered_carrier_date timestamp
+    - Delivered = status == delivered
+    All percentages are relative to total orders (top of funnel).
+    """
+    total = len(master)
 
-    df = pd.DataFrame({'stage': stages, 'orders': users})
-    first_val = df['orders'].iloc[0] if len(df) > 0 else 1
-    df['pct_of_total']   = (df['orders'] / first_val * 100).round(2)
-    df['conversion_rate']= df['pct_of_total']
-    df['dropoff_pct']    = (1 - df['orders'] / df['orders'].shift(1)).fillna(0).mul(100).round(2)
+    stages = ['Orders Placed', 'Approved', 'Invoiced / Processing', 'Shipped', 'Delivered']
+    counts = [
+        total,
+        master['order_approved_at'].notna().sum(),
+        master['order_status'].isin(['invoiced','processing','shipped','delivered']).sum(),
+        master['order_delivered_carrier_date'].notna().sum(),
+        (master['order_status'] == 'delivered').sum(),
+    ]
 
-    # Cancellation separate
-    cancel_count = counts.get('canceled', 0)
-    total        = len(master) if len(master) > 0 else 1
+    df = pd.DataFrame({'stage': stages, 'orders': counts})
+    df['conversion_rate'] = (df['orders'] / total * 100).round(2)
+    df['dropoff_pct']     = (1 - df['orders'] / df['orders'].shift(1)).fillna(0).mul(100).round(2)
+
+    cancel_count = (master['order_status'] == 'canceled').sum()
     cancel_pct   = round(cancel_count / total * 100, 2)
     return df, cancel_count, cancel_pct
 
@@ -129,6 +137,10 @@ def cohort_analysis(master):
 
 # ─── CUSTOMER ANALYTICS ───────────────────────────────────────────────────────
 def customer_analytics(master):
+    """
+    Note: This dataset's customer_id is a surrogate key — unique per order.
+    Repeat purchase analysis is not possible. All metrics are order-level.
+    """
     df = master[master['order_status']=='delivered'].copy()
     cust = (df.groupby('customer_id')
             .agg(
@@ -137,9 +149,8 @@ def customer_analytics(master):
                 first_order=('order_purchase_timestamp','min'),
                 last_order=('order_purchase_timestamp','max'),
             ).reset_index())
-    cust['clv']          = cust['total_revenue']
-    cust['is_repeat']    = cust['total_orders'] > 1
-    cust['order_freq']   = cust['total_orders']
+    cust['clv']        = cust['total_revenue']
+    cust['order_freq'] = cust['total_orders']
 
     # Revenue segments
     cust['revenue_segment'] = pd.cut(
@@ -148,7 +159,7 @@ def customer_analytics(master):
         labels=['Low (<R$100)', 'Mid (R$100-300)', 'High (R$300-1k)', 'Premium (R$1k+)']
     )
 
-    # Review segments — merge review_score from master
+    # Review segments
     avg_review = df.groupby('customer_id')['review_score'].mean().reset_index()
     cust = cust.merge(avg_review, on='customer_id', how='left')
     cust['review_segment'] = pd.cut(
@@ -158,19 +169,12 @@ def customer_analytics(master):
     )
 
     total_customers = len(cust)
-    repeat_customers= cust['is_repeat'].sum()
-    new_customers   = total_customers - repeat_customers
-    repeat_rate     = round(repeat_customers / total_customers * 100, 2)
     avg_clv         = round(cust['clv'].mean(), 2)
-    avg_freq        = round(cust['order_freq'].mean(), 2)
 
     summary = {
-        'total_customers':   total_customers,
-        'repeat_customers':  int(repeat_customers),
-        'new_customers':     int(new_customers),
-        'repeat_rate':       repeat_rate,
-        'avg_clv':           avg_clv,
-        'avg_order_freq':    avg_freq,
+        'total_customers':  total_customers,
+        'avg_clv':          avg_clv,
+        'dataset_note':     'customer_id is unique per order — repeat rate not measurable in this dataset',
     }
     return cust, summary
 
@@ -273,9 +277,8 @@ def generate_insights(kpis, cust_summary, nps_data, delivery_df, by_bucket):
         diff = round(ontime_avg - late_avg, 2)
         insights.append(('error', f"Late deliveries score {late_avg:.2f} vs {ontime_avg:.2f} on-time — {diff} point gap"))
 
-    # One-time buyers
-    if cust_summary['repeat_rate'] < 10:
-        insights.append(('warning', f"Only {cust_summary['repeat_rate']}% customers repeat — strong one-time buyer problem"))
+    # One-time buyers — not measurable in this dataset
+    insights.append(('info', "Repeat purchase rate not measurable — Olist assigns unique customer_id per order"))
 
     # NPS
     nps = nps_data['nps']
@@ -289,6 +292,6 @@ def generate_insights(kpis, cust_summary, nps_data, delivery_df, by_bucket):
         insights.append(('warning', f"Avg delivery is {kpis['avg_delivery_days']} days — customers expect under 7"))
 
     # Revenue concentration
-    insights.append(('info', f"Avg CLV: R${cust_summary['avg_clv']:,.2f} | Avg orders/customer: {cust_summary['avg_order_freq']}"))
+    insights.append(('info', f"Avg order value: R${cust_summary['avg_clv']:,.2f} — upsell opportunity"))
 
     return insights

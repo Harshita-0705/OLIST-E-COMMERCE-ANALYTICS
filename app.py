@@ -339,13 +339,12 @@ elif page == "👥 Customer Analytics":
     st.title("👥 Customer & Order Analytics")
     st.caption("Order value distribution, revenue segments, review segments — delivered orders only")
 
-    st.info("ℹ️ Olist's customer_id is unique per order. Metrics reflect order-level behavior. CLV = avg order value.")
+    st.info("ℹ️ Olist's customer_id is unique per order — each order gets a new ID. Repeat purchase rate cannot be measured from this dataset. All metrics below are order-level.")
 
-    k1,k2,k3,k4 = st.columns(4)
-    k1.metric("Total Customers",       f"{cust_sum['total_customers']:,}")
-    k2.metric("Repeat Customers",      f"{cust_sum['repeat_customers']:,}", f"{cust_sum['repeat_rate']}%")
-    k3.metric("Avg Order Value (CLV)", f"R${cust_sum['avg_clv']:,.2f}")
-    k4.metric("Avg Review Score",      f"{kpis['avg_review_score']} / 5")
+    k1,k2,k3 = st.columns(3)
+    k1.metric("Total Orders (Delivered)", f"{cust_sum['total_customers']:,}")
+    k2.metric("Avg Order Value",          f"R${cust_sum['avg_clv']:,.2f}")
+    k3.metric("Avg Review Score",         f"{kpis['avg_review_score']} / 5")
 
     st.divider()
     col1, col2 = st.columns(2)
@@ -407,9 +406,7 @@ elif page == "👥 Customer Analytics":
     c1, c2, c3 = st.columns(3)
     c1.info(f"Avg order value: R${cust_sum['avg_clv']:,.2f} — focus on upsell to grow revenue")
     c2.success(f"Delivery rate: {kpis['delivery_rate']}% — strong fulfillment performance")
-    c3.warning(f"Late delivery rate: {kpis['late_delivery_pct']}% — directly impacts review scores")
-
-# ══════════════════════════════════════════════════════════════════════════════
+    c3.warning(f"Late delivery rate: {kpis['late_delivery_pct']}% — directly impacts review scores")# ══════════════════════════════════════════════════════════════════════════════
 # PAGE 5 — DELIVERY ANALYSIS
 # ══════════════════════════════════════════════════════════════════════════════
 elif page == "🚚 Delivery Analysis":
